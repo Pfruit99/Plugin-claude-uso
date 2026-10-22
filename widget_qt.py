@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import struct
 from pathlib import Path
 
-from PySide6.QtCore import (QBuffer, QByteArray, QEasingCurve, QIODevice, QObject, QPointF, QPropertyAnimation,
+from PySide6.QtCore import (QBuffer, QByteArray, QEasingCurve, QIODevice, QObject, QPoint, QPointF, QPropertyAnimation,
                             QRectF, Qt, QTimer, QVariantAnimation, Signal)
 from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor, QFont, QFontDatabase, QFontMetricsF, QIcon,
                            QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRegion)
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QHBo
 import widget as core
 
 APP_NAME = "Claude Usage Widget"
-VERSION = "0.05"
+VERSION = "0.0.5"
 CODENAME = "Aurora"
 AUTHOR = "Pfruit99"
 APP_ID = "Pfruit99.ClaudeUsageWidget"
@@ -134,26 +134,41 @@ def pace_fraction(window, span):
 
 
 class Panel(QWidget):
-    """Panel flotante de opciones; al ser Popup se cierra solo al hacer clic fuera."""
+    """Panel flotante de opciones: se arrastra desde cualquier zona libre, queda abierto y se atenua
+    cuando el raton no esta encima para no estorbar a otras ventanas."""
 
-    W, SEG_H, ACT_H, PADX = 236, 40, 34, 14
+    W, SEG_H, ACT_H, PADX, HEAD = 236, 40, 34, 14, 30
+    DIM = 0.55  # opacidad relativa cuando el raton no esta encima
 
     def __init__(self, app):
-        super().__init__(None, Qt.Popup | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+        flags = Qt.Tool | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint
+        if app.cfg["topmost"]:
+            flags |= Qt.WindowStaysOnTopHint
+        super().__init__(None, flags)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMouseTracking(True)
-        self.app, self.hover = app, None
+        self.app, self.hover, self._drag, self._moved = app, None, None, False
         self._build()
         self.setFixedSize(self.W + 2 * M, self.h + 2 * M)
         self.setWindowOpacity(app.cfg["opacity"] / 100)
-        pos = QCursor.pos()
-        area = app.screen().availableGeometry()
-        self.move(max(area.left(), min(pos.x(), area.right() - self.width() - 8)),
-                  max(area.top(), min(pos.y(), area.bottom() - self.height() - 8)))
+        self.move(self._start_pos())
+
+    def _start_pos(self):
+        """Ultima posicion usada; si no hay, junto al widget (a un lado) para no taparlo."""
+        area, cfg, card = self.app.screen().availableGeometry(), self.app.cfg, self.app
+        x, y = cfg.get("panel_x"), cfg.get("panel_y")
+        if not isinstance(x, int) or not isinstance(y, int):
+            x = card.x() + card.width() + 4
+            if x + self.width() > area.right():
+                x = card.x() - self.width() - 4
+            y = card.y()
+        return QPoint(max(area.left(), min(x, area.right() - self.width() - 8)),
+                      max(area.top(), min(y, area.bottom() - self.height() - 8)))
 
     def _build(self):
         self.segs, self.btns, self.acts = [], [], []
-        y = 10
+        self.close_rect = QRectF(self.W - 34, 4, 26, 22)
+        y = self.HEAD + 4
         for label, key, options in (("Vista", "view", ("ring", "bar")),
                                     ("Tamaño", "size", ("compact", "full")),
                                     ("Tema", "theme", ("auto", "light", "dark"))):
@@ -181,25 +196,56 @@ class Panel(QWidget):
         self._fade.setStartValue(0.0)
         self._fade.setEndValue(self.app.cfg["opacity"] / 100)
         self._fade.start()
+        QTimer.singleShot(1800, self._dim_if_idle)
+
+    def _dim_if_idle(self):
+        if self.isVisible() and not self.underMouse() and self._drag is None:
+            self.setWindowOpacity(self._base_opacity() * self.DIM)
 
     def _hit(self, pos):
         pt = QPointF(pos.x() - M, pos.y() - M)
+        if self.close_rect.contains(pt):
+            return ("act", "close")
         for rect, action, *_ in self.btns + self.acts:
             if rect.contains(pt):
                 return action
         return None
 
+    def _base_opacity(self):
+        return self.app.cfg["opacity"] / 100
+
+    def enterEvent(self, e):
+        self.setWindowOpacity(self._base_opacity())
+
+    def leaveEvent(self, e):
+        self.hover = None
+        if self._drag is None:
+            self.setWindowOpacity(self._base_opacity() * self.DIM)
+        self.update()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton and self._hit(e.position()) is None:
+            self._drag = e.globalPosition().toPoint() - self.pos()  # zona libre: arrastrar
+            self._moved = False
+
     def mouseMoveEvent(self, e):
+        if self._drag is not None:
+            self._moved = True
+            self.move(e.globalPosition().toPoint() - self._drag)
+            return
         hit = self._hit(e.position())
+        self.setCursor(Qt.PointingHandCursor if hit else Qt.SizeAllCursor)
         if hit != self.hover:
             self.hover = hit
             self.update()
 
-    def leaveEvent(self, e):
-        self.hover = None
-        self.update()
-
     def mouseReleaseEvent(self, e):
+        if self._drag is not None:
+            self._drag = None
+            if self._moved:
+                self.app.cfg["panel_x"], self.app.cfg["panel_y"] = self.x(), self.y()
+                core.save_config(self.app.cfg)
+            return
         action = self._hit(e.position())
         if action:
             self._run(action)
@@ -216,9 +262,11 @@ class Panel(QWidget):
             {"view": app.set_view, "size": app.set_size, "theme": app.set_theme}[action[1]](action[2])
             self.update()
             return
-        self.close()
-        QTimer.singleShot(0, {"settings": app.open_settings, "exit": QApplication.quit,
-                              "refresh": lambda: app.refresh(reschedule=False)}[action[1]])
+        if action[1] == "close":
+            self.close()
+            return
+        {"settings": app.open_settings, "exit": QApplication.quit,
+         "refresh": lambda: app.refresh(reschedule=False)}[action[1]]()
 
     def paintEvent(self, e):
         app, cfg, f = self.app, self.app.cfg, self.app.fonts
@@ -232,6 +280,19 @@ class Panel(QWidget):
         p.setBrush(qc(pal["bg"], 245))
         p.setPen(QPen(QColor(pal["border"]), 1))
         p.drawPath(card)
+
+        # cabecera: asa de arrastre (puntos), titulo y cerrar
+        p.setPen(Qt.NoPen)
+        p.setBrush(qc(pal["muted"], 150))
+        for i in range(3):
+            for j in range(2):
+                p.drawEllipse(QPointF(self.W / 2 - 8 + i * 8, 11 + j * 6), 1.4, 1.4)
+        draw_text(p, self.PADX + 2, 15, "Opciones", pal["muted"], f.make(9))
+        if self.hover == ("act", "close"):
+            p.setBrush(QColor(core.BAD))
+            p.drawRoundedRect(self.close_rect, 7, 7)
+        draw_text(p, self.close_rect.center().x(), self.close_rect.center().y(), f.glyph["close"],
+                  "#FFFFFF" if self.hover == ("act", "close") else pal["muted"], f.make(9, icon=True), "c")
 
         for label, key, y in self.segs:
             draw_text(p, self.PADX + 2, y + self.SEG_H / 2, label, pal["text"], f.make(10))
