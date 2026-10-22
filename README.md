@@ -1,8 +1,10 @@
-# Widget de uso de Claude
+# Claude Usage Widget
+
+**Versión 0.05 «Aurora»** (interfaz Qt) · Desarrollado por **Pfruit99** con **Claude Code**
 
 Widget de escritorio para Windows que muestra de un vistazo cuánto te queda del límite de 5 horas y del límite semanal de Claude Code, junto con los tokens de hoy y de la semana y el porcentaje de contexto.
 
-Usa solo la biblioteca estándar de Python (tkinter): sin dependencias que instalar.
+Interfaz Qt (PySide6) con antialiasing, degradados, sombra suave, marca de ritmo y iconos Fluent. Si PySide6 no está instalado, `widget.pyw` usa automáticamente la versión Tk (`widget.py`), que solo necesita la biblioteca estándar.
 
 ## Cómo funciona
 
@@ -12,7 +14,8 @@ Usa solo la biblioteca estándar de Python (tkinter): sin dependencias que insta
 ## Requisitos
 
 - Windows 10/11
-- Python 3.10 o superior (con tkinter)
+- Python 3.10 o superior
+- `pip install PySide6-Essentials` (opcional; sin él se usa la versión Tk)
 - Claude Code con la línea de estado configurada
 
 ## Instalación y uso
@@ -72,6 +75,13 @@ Todo se aplica y se guarda al instante en `~\.claude-usage-widget.json`. Los val
 
 ## Cambios
 
+### 0.05 «Aurora»
+- Interfaz Qt (PySide6) con antialiasing, degradados, sombra y marca de ritmo.
+- Icono propio (`assets/icon.ico`, regenerable con `python widget_qt.py --export-icon`) en ventanas, bandeja y acceso directo de inicio.
+- Icono en la bandeja del sistema: clic para mostrar u ocultar, menú con Ajustes, Actualizar y Salir, y el uso en el tooltip.
+- Ajustes sin marco: se despliega con animación, se mueve desde su barra de título e incluye versión y créditos.
+- El panel de opciones aparece con un fundido suave.
+
 ### Correcciones
 - "Actualizar ahora" ya no crea una cadena nueva de refrescos en cada clic.
 - La marca de tiempo de `statusline.ps1` usa UTC real (`ToUnixTimeSeconds`); antes `Get-Date -UFormat %s` podía desfasar la hora en PowerShell 5.1.
@@ -100,7 +110,9 @@ Todo se aplica y se guarda al instante en `~\.claude-usage-widget.json`. Los val
 
 | Archivo | Descripción |
 |---------|-------------|
-| `widget.py` | Widget, panel de opciones, ajustes y conteo de tokens |
+| `widget_qt.py` | Interfaz Qt: tarjeta, anillos/barras, panel de opciones y ajustes |
+| `widget.py` | Lógica (límites, tokens, config) y versión Tk de respaldo |
+| `assets/icon.ico` | Icono de la aplicación |
 | `widget.pyw` | Lanzador sin consola |
 | `statusline.ps1` | Línea de estado de Claude Code que escribe los límites |
 | `instalar_inicio.ps1` | Crea el acceso directo de inicio con Windows |

@@ -119,9 +119,11 @@ $s.TargetPath = $env:EXE
 $s.Arguments = '"' + $env:SCRIPT + '"'
 $s.WorkingDirectory = $env:DIR
 $s.WindowStyle = 7
+if ($env:ICON) { $s.IconLocation = $env:ICON }
 $s.Save()"""
+    icon = here / "assets" / "icon.ico"
     env = {**os.environ, "LNK": str(STARTUP_LNK), "EXE": str(exe),
-           "SCRIPT": str(here / "widget.pyw"), "DIR": str(here)}
+           "SCRIPT": str(here / "widget.pyw"), "DIR": str(here), "ICON": str(icon) if icon.exists() else ""}
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=env, check=True,
                    creationflags=0x08000000, timeout=20)
 
