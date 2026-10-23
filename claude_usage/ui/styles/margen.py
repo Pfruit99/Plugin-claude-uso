@@ -5,7 +5,7 @@ from PySide6.QtGui import QFontMetricsF
 from ...status import SPANS, pace_fraction
 from ...texts import WINDOW_NAMES, margin_parts, other_window_note
 from ..draw import draw_card, draw_text, draw_track
-from ..theme import BAD, NO_DATA, PAD, STATUS_COLOR
+from ..theme import BAD, NO_DATA, PAD
 from .base import Layout, gear_zone
 
 W, H = 290, 172
@@ -17,8 +17,8 @@ class Margen:
 
     def paint(self, p, ctx, layout):
         pal, f, st = ctx.pal, ctx.fonts, ctx.status
-        color = STATUS_COLOR[st.level]
-        draw_card(p, QRectF(0, 0, W, H), pal, border=BAD if st.exhausted else None)
+        color = ctx.fx.color(st.level)
+        draw_card(p, QRectF(0, 0, W, H), pal, border=BAD if st.exhausted else None, flash=(color, ctx.fx.flash))
         title = f"Claude · {WINDOW_NAMES[st.key]}" if st.key else "Claude"
         draw_text(p, PAD, 24, title, pal["muted"], f.make(10))
         draw_text(p, W - PAD - 6, 24, f.glyph["settings"], pal["muted"], f.make(11, icon=True), "c")

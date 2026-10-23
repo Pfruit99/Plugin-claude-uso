@@ -34,7 +34,8 @@ class Clasico:
         updated, context = ctx.limits.updated, ctx.limits.context
         full, ring = cfg["size"] == "full", cfg["view"] == "ring"
         exhausted = exhausted_windows(ctx.real)
-        draw_card(p, QRectF(0, 0, W, H), pal, border=BAD if exhausted else None)
+        draw_card(p, QRectF(0, 0, W, H), pal, border=BAD if exhausted else None,
+                  flash=(ctx.fx.color(ctx.status.level), ctx.fx.flash))
 
         draw_text(p, PAD, 24, "Uso de Claude" if full else "Claude", pal["text"], f.make(12 if full else 11, True))
         icon_font = f.make(11, icon=True)

@@ -1,6 +1,6 @@
 # Claude Usage Widget
 
-**Versión 0.1.0 «Aurora»** · Desarrollado por **Pfruit99** con **Claude Code**
+**Versión 0.2.0 «Aurora»** · Desarrollado por **Pfruit99** con **Claude Code**
 
 Widget de escritorio para Windows que responde de un vistazo a una pregunta: **¿puedo seguir trabajando con Claude Code?** Compara cuánto llevas gastado de los límites de 5 horas y semanal con el tiempo que ha pasado, y te lo dice como *Libre*, *Ojo* o *Frena*.
 
@@ -22,6 +22,20 @@ Se eligen en el panel de opciones (fila **Estilo**) y se guardan.
 - **Libre**: el resto.
 
 La marca blanca en barras y anillos indica cuánto deberías llevar según el tiempo transcurrido.
+
+## Avisos y animaciones
+
+**Avisos de Windows** (se desactivan en Ajustes; «Probar aviso» te enseña cómo se ven):
+
+| Cambio | Aviso |
+|--------|-------|
+| *Libre* → *Ojo* | «Ojo con el uso» |
+| Cualquiera → *Frena* | «Frena un momento», con la hora de reinicio |
+| *Frena* termina | «Ya puedes seguir trabajando» |
+
+No avisa al arrancar, sin datos ni con datos desactualizados, y no repite el mismo tipo de aviso en 10 minutos.
+
+**Animaciones** (se desactivan en Ajustes → Animaciones): al cambiar de estado, la palabra y el color se funden y el borde da un destello; la luz de Semáforo y Píldora late despacio en *Ojo* y más rápido en *Frena*. Solo consumen mientras hay algo que animar.
 
 ## Cómo funciona
 
@@ -82,9 +96,9 @@ Selectores con icono de un solo clic para **Estilo**, **Tema** (automático, cla
 
 ### Ajustes
 
-- **Apariencia:** tema y opacidad (30–100 %).
+- **Apariencia:** tema, opacidad (30–100 %) y animaciones.
 - **Datos:** intervalo de actualización (5, 15, 30 o 60 s) y umbrales de «Ojo» y «Frena» (por defecto 70 % y 90 %).
-- **Sistema:** iniciar con Windows y restablecer valores.
+- **Sistema:** iniciar con Windows, avisos de Windows (con botón «Probar aviso») y restablecer valores.
 
 Todo se aplica al instante y se guarda en `~\.claude-usage-widget.json`. Los valores fuera de rango vuelven al valor por defecto. Los errores se guardan en `~\.claude-usage-widget.log`.
 
@@ -94,8 +108,8 @@ Todo se aplica al instante y se guarda en `~\.claude-usage-widget.json`. Los val
 |------|-------------|
 | `ClaudeWidget.pyw` | Único ejecutable: lanzador sin consola |
 | `statusline.ps1` | Línea de estado de Claude Code que escribe los límites (se queda en la raíz porque `settings.json` apunta a ella) |
-| `claude_usage/` | Paquete: `config`, `limits`, `status` (Libre/Ojo/Frena), `texts`, `tokens`, `winsys`, `app` |
-| `claude_usage/ui/` | Interfaz Qt: ventana, panel de opciones, ajustes, dibujo común |
+| `claude_usage/` | Paquete: `config`, `limits`, `status` (Libre/Ojo/Frena), `alerts` (avisos), `texts`, `tokens`, `winsys`, `app` |
+| `claude_usage/ui/` | Interfaz Qt: ventana, panel de opciones, ajustes, dibujo común y efectos (`fx`) |
 | `claude_usage/ui/styles/` | Un módulo por estilo: `semaforo`, `margen`, `pildora`, `clasico` |
 | `assets/icon.ico` | Icono (regenerable con `python ClaudeWidget.pyw --export-icon`) |
 | `tests/` | Pruebas: `python -m unittest discover -s tests` |

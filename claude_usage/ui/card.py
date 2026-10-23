@@ -7,14 +7,16 @@ from datetime import datetime, timedelta
 
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QPainter
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QSystemTrayIcon, QWidget
 
 from .. import APP_NAME, config, winsys
+from ..alerts import Alert, StateWatcher
 from ..limits import Limits, Window, read_limits
-from ..status import compute_status
+from ..status import STALE_SECONDS, compute_status
 from ..texts import WINDOW_NAMES, WORDS
 from ..tokens import TokenCounter
 from .fonts import Fonts
+from .fx import Fx, fx_active, make_fx
 from .icon import make_icon
 from .panel import Panel
 from .settings import SettingsDialog
@@ -25,6 +27,8 @@ from .theme import THEMES, M
 ANIM_MS = 16        # ~60 fps solo mientras un valor cambia
 TOKENS_EVERY = 30
 HOVER_LEAVE_MS = 250  # retardo al salir el raton, para que la pildora no parpadee
+FX_MS = 50            # ~20 fps para el latido y el destello; solo corre cuando hay algo que animar
+NOTIFY_MS = 8000
 
 
 class Bridge(QObject):
@@ -53,6 +57,8 @@ class Card(QWidget):
         self._press = self._origin = None
         self._moved = False
         self._layout = None
+        self.watcher = StateWatcher()
+        self._level = self._prev_level = self._changed_at = None  # para el fundido y el destello
 
         self.anim = QTimer(self)
         self.anim.setInterval(ANIM_MS)
@@ -63,6 +69,9 @@ class Card(QWidget):
         self.minute.setInterval(30_000)
         self.minute.timeout.connect(self.relayout)
         self.minute.start()
+        self.fx_timer = QTimer(self)
+        self.fx_timer.setInterval(FX_MS)
+        self.fx_timer.timeout.connect(self._fx_tick)
         self.leave_timer = QTimer(self)
         self.leave_timer.setSingleShot(True)
         self.leave_timer.setInterval(HOVER_LEAVE_MS)
@@ -130,12 +139,17 @@ class Card(QWidget):
             return
         self._settings = SettingsDialog(self)
         self._settings.setAttribute(Qt.WA_DeleteOnClose)
+        self._settings.destroyed.connect(self._forget_settings)  # evita usar una ventana ya borrada
         self._settings.show()
         self._settings.move(self.x(), self.y() + self.height() + 8)
+
+    def _forget_settings(self, *_):
+        self._settings = None
 
     # --- datos ------------------------------------------------------------------
     def refresh(self, reschedule=True):
         self.limits = read_limits()
+        self._watch_state()
         self.relayout()
         if not self._busy and time.time() - self._tokens_at >= max(TOKENS_EVERY, self.cfg["refresh"]):
             self._busy = True
@@ -161,6 +175,24 @@ class Card(QWidget):
             self._busy = False
         self.bridge.tokens_ready.emit()
 
+    # --- avisos de Windows ------------------------------------------------------
+    def _watch_state(self):
+        now = time.time()
+        status = compute_status(self.limits, self.cfg["warn"], self.cfg["bad"], now)
+        stale = bool(self.limits.updated) and now - self.limits.updated > STALE_SECONDS
+        alert = self.watcher.update(status, stale, now)  # siempre vigila; solo muestra si esta activado
+        if alert and self.cfg["notify"]:
+            self.notify(alert)
+
+    def notify(self, alert):
+        if self.tray is None or not QSystemTrayIcon.supportsMessages():
+            return
+        icon = QSystemTrayIcon.Warning if alert.warning else QSystemTrayIcon.Information
+        self.tray.showMessage(alert.title, alert.message, icon, NOTIFY_MS)
+
+    def test_notification(self):
+        self.notify(Alert("prueba", "Aviso de prueba", "Así te avisará el widget cuando cambie el estado.", False))
+
     def tooltip(self):
         st = compute_status(self.limits, self.cfg["warn"], self.cfg["bad"])
 
@@ -178,8 +210,34 @@ class Card(QWidget):
         cfg = self.cfg
         animated = replace(self.limits, five=self._animated("five", self.limits.five),
                            week=self._animated("week", self.limits.week))
-        return Context(limits=animated, real=self.limits, status=compute_status(self.limits, cfg["warn"], cfg["bad"], now),
-                       tokens=self.tokens, cfg=cfg, pal=self.palette_(), fonts=self.fonts, hover=self._hover, now=now)
+        status = compute_status(self.limits, cfg["warn"], cfg["bad"], now)
+        return Context(limits=animated, real=self.limits, status=status, tokens=self.tokens, cfg=cfg,
+                       pal=self.palette_(), fonts=self.fonts, hover=self._hover, now=now, fx=self._fx(status.level, now))
+
+    def _fx(self, level, now):
+        if not self.cfg["animations"]:
+            return Fx()
+        return make_fx(level, self._prev_level, self._changed_at, now)
+
+    def _track_level(self, level, now):
+        """Recuerda el estado anterior y cuando cambio, para el fundido y el destello."""
+        if level != self._level:
+            if self._level is not None:
+                self._prev_level, self._changed_at = self._level, now
+            self._level = level
+
+    def _sync_fx_timer(self):
+        active = (self.cfg["animations"] and self.isVisible()
+                  and fx_active(self._level, self._changed_at, time.time()))
+        if active != self.fx_timer.isActive():
+            if active:
+                self.fx_timer.start()
+            else:
+                self.fx_timer.stop()
+
+    def _fx_tick(self):
+        self.update()
+        self._sync_fx_timer()
 
     def _style_layout(self):
         ctx = self._context()
@@ -189,10 +247,12 @@ class Card(QWidget):
     def relayout(self):
         if self.tray is not None:
             self.tray.setToolTip(self.tooltip())
+        self._track_level(compute_status(self.limits, self.cfg["warn"], self.cfg["bad"]).level, time.time())
         _, _, layout = self._style_layout()
         self._layout = layout
         self.setFixedSize(layout.w + 2 * M, layout.h + 2 * M)
         self._kick_anim()
+        self._sync_fx_timer()
         self.update()
 
     def _kick_anim(self):
@@ -220,6 +280,14 @@ class Card(QWidget):
         self.update()
 
     # --- eventos ----------------------------------------------------------------
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._sync_fx_timer()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self._sync_fx_timer()  # oculto en la bandeja: sin animaciones
+
     def enterEvent(self, e):
         self.leave_timer.stop()
         if not self._hover:

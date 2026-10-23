@@ -6,6 +6,7 @@ from PySide6.QtCore import QPointF, QRectF
 
 from ...limits import Limits
 from ...status import STALE_SECONDS, Status
+from ..fx import Fx
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class Context:
     fonts: object
     hover: bool
     now: float
+    fx: Fx = Fx()  # efectos de vida visual; por defecto, ninguno
 
     @property
     def stale(self):

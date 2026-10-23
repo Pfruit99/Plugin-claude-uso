@@ -9,8 +9,9 @@ THEME_CHOICES = (("Seguir a Windows", "auto"), ("Claro", "light"), ("Oscuro", "d
 REFRESH_CHOICES = (("5 s", 5), ("15 s", 15), ("30 s", 30), ("60 s", 60))
 
 DEFAULT_CONFIG = dict(style="semaforo", view="ring", size="full", theme="auto", topmost=True, x=None, y=None,
-                      panel_x=None, panel_y=None, refresh=15, warn=70, bad=90, opacity=100)
-RESETTABLE = ("style", "view", "size", "theme", "topmost", "refresh", "warn", "bad", "opacity")
+                      panel_x=None, panel_y=None, refresh=15, warn=70, bad=90, opacity=100, animations=True, notify=True)
+RESETTABLE = ("style", "view", "size", "theme", "topmost", "refresh", "warn", "bad", "opacity", "animations",
+              "notify")
 
 
 def _int_in(value, lo, hi, default):
@@ -34,7 +35,8 @@ def sanitize_config(cfg):
         cfg["size"] = d["size"]
     if cfg.get("theme") not in {v for _, v in THEME_CHOICES}:
         cfg["theme"] = d["theme"]
-    cfg["topmost"] = bool(cfg.get("topmost", d["topmost"]))
+    for key in ("topmost", "animations", "notify"):
+        cfg[key] = bool(cfg.get(key, d[key]))
     cfg["refresh"] = _int_in(cfg.get("refresh"), 5, 300, d["refresh"])
     cfg["opacity"] = _int_in(cfg.get("opacity"), 30, 100, d["opacity"])
     cfg["warn"] = _int_in(cfg.get("warn"), 1, 98, d["warn"])

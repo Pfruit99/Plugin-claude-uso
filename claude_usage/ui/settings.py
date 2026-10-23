@@ -95,6 +95,9 @@ class SettingsDialog(QDialog):
         holder = QWidget()
         holder.setLayout(both)
         row("Opacidad", holder)
+        self.animations = QCheckBox("Animaciones (latido y destello)")
+        self.animations.toggled.connect(lambda on: app.apply("animations", on))
+        root.addWidget(self.animations)
 
         section("Datos")
         self.refresh = QComboBox()
@@ -112,6 +115,15 @@ class SettingsDialog(QDialog):
         self.startup = QCheckBox("Iniciar con Windows")
         self.startup.toggled.connect(self._startup)
         root.addWidget(self.startup)
+        self.notify = QCheckBox("Avisos de Windows al cambiar de estado")
+        self.notify.toggled.connect(lambda on: app.apply("notify", on))
+        root.addWidget(self.notify)
+        test = QPushButton("Probar aviso")
+        test.clicked.connect(app.test_notification)
+        line = QHBoxLayout()
+        line.addWidget(test)
+        line.addStretch()
+        root.addLayout(line)
 
         buttons = QHBoxLayout()
         buttons.addStretch()
@@ -144,7 +156,8 @@ class SettingsDialog(QDialog):
     def _sync(self):
         """Refleja la configuracion actual en los controles (sin disparar cambios)."""
         cfg = self.app.cfg
-        controls = (self.theme, self.opacity, self.refresh, self.startup, *self.spins.values())
+        controls = (self.theme, self.opacity, self.refresh, self.startup, self.animations, self.notify,
+                    *self.spins.values())
         for w in controls:
             w.blockSignals(True)
         self.theme.setCurrentIndex([v for _, v in THEME_CHOICES].index(cfg["theme"]))
@@ -155,6 +168,8 @@ class SettingsDialog(QDialog):
         for key, spin in self.spins.items():
             spin.setValue(cfg[key])
         self.startup.setChecked(winsys.startup_enabled())
+        self.animations.setChecked(cfg["animations"])
+        self.notify.setChecked(cfg["notify"])
         for w in controls:
             w.blockSignals(False)
 

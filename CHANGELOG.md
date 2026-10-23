@@ -4,6 +4,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
+### Added
+- Avisos de Windows al cambiar de estado: al pasar a *Ojo*, al pasar a *Frena* y «Ya puedes seguir trabajando» cuando *Frena* termina. No avisa al arrancar, sin datos ni con datos desactualizados, y no repite el mismo aviso en 10 minutos.
+- Más vida visual: al cambiar de estado la palabra y el color se funden con un pequeño deslizamiento y el borde da un destello; la luz de Semáforo y Píldora late despacio en *Ojo* y más rápido en *Frena* (queda quieta en *Libre*).
+- Ajustes: interruptores «Animaciones» y «Avisos de Windows», y un botón «Probar aviso».
+
+### Fixed
+- Ajustes ya no falla al abrirlo por segunda vez tras cerrarlo (el programa seguía apuntando a la ventana borrada; el error quedaba en el log).
+
+### Changed
+- Las animaciones solo gastan CPU mientras hay algo que animar: se detienen si el widget está oculto en la bandeja y en estado *Libre*.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

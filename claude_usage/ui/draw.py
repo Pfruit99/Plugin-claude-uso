@@ -50,8 +50,8 @@ def draw_shadow(p, rect, radius):
     p.drawPixmap(int(rect.x()) - M, int(rect.y()) - M, _shadow_pixmap(rect.width(), rect.height(), radius))
 
 
-def draw_card(p, rect, pal, radius=18, border=None, shine=True):
-    """Fondo de tarjeta: sombra, relleno, borde y un brillo sutil arriba."""
+def draw_card(p, rect, pal, radius=18, border=None, shine=True, flash=None):
+    """Fondo de tarjeta: sombra, relleno, borde y un brillo sutil arriba; flash = (color, 0..1) añade un destello."""
     draw_shadow(p, rect, radius)
     path = QPainterPath()
     path.addRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
@@ -66,13 +66,18 @@ def draw_card(p, rect, pal, radius=18, border=None, shine=True):
         grad.setColorAt(1, QColor(255, 255, 255, 0))
         p.fillRect(QRectF(rect.x(), rect.y(), rect.width(), 70), grad)
         p.restore()
+    if flash and flash[1] > 0.01:
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(qc(flash[0], int(220 * flash[1])), 1 + 2.5 * flash[1]))
+        p.drawPath(path)
 
 
-def draw_dot(p, cx, cy, r, color):
-    """Luz de estado con un halo suave."""
+def draw_dot(p, cx, cy, r, color, pulse=None):
+    """Luz de estado con un halo suave; pulse (0..1) hace latir el halo."""
+    halo, alpha = (r + 5, 50) if pulse is None else (r + 3 + 5 * pulse, 30 + int(70 * pulse))
     p.setPen(Qt.NoPen)
-    p.setBrush(qc(color, 50))
-    p.drawEllipse(QPointF(cx, cy), r + 5, r + 5)
+    p.setBrush(qc(color, alpha))
+    p.drawEllipse(QPointF(cx, cy), halo, halo)
     p.setBrush(QColor(color))
     p.drawEllipse(QPointF(cx, cy), r, r)
 
