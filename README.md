@@ -1,21 +1,38 @@
 # Claude Usage Widget
 
-**Versión 0.05 «Aurora»** (interfaz Qt) · Desarrollado por **Pfruit99** con **Claude Code**
+**Versión 0.1.0 «Aurora»** · Desarrollado por **Pfruit99** con **Claude Code**
 
-Widget de escritorio para Windows que muestra de un vistazo cuánto te queda del límite de 5 horas y del límite semanal de Claude Code, junto con los tokens de hoy y de la semana y el porcentaje de contexto.
+Widget de escritorio para Windows que responde de un vistazo a una pregunta: **¿puedo seguir trabajando con Claude Code?** Compara cuánto llevas gastado de los límites de 5 horas y semanal con el tiempo que ha pasado, y te lo dice como *Libre*, *Ojo* o *Frena*.
 
-Interfaz Qt (PySide6) con antialiasing, degradados, sombra suave, marca de ritmo y iconos Fluent. Si PySide6 no está instalado, `widget.pyw` usa automáticamente la versión Tk (`widget.py`), que solo necesita la biblioteca estándar.
+## Estilos
+
+Se eligen en el panel de opciones (fila **Estilo**) y se guardan.
+
+| Estilo | Qué muestra |
+|--------|-------------|
+| **Semáforo** | Luz de color y palabra grande, barra con marca de ritmo y hora de reinicio |
+| **Margen** | El uso traducido a tiempo útil: «Te sobra 1 h 02 min de margen» |
+| **Píldora** | Cápsula mínima (luz + estado + reinicio); al pasar el ratón se despliegan los anillos |
+| **Clásico** | Anillos o barras, tamaño compacto o completo, con tokens y contexto |
+
+**Cómo se decide el estado** (los umbrales se cambian en Ajustes):
+
+- **Frena**: algún límite al 90 % o más, o agotado.
+- **Ojo**: algún límite al 70 % o más, o vas más de 10 puntos por delante del tiempo transcurrido.
+- **Libre**: el resto.
+
+La marca blanca en barras y anillos indica cuánto deberías llevar según el tiempo transcurrido.
 
 ## Cómo funciona
 
 1. `statusline.ps1` lo ejecuta Claude Code como línea de estado y guarda los límites en `~\.claude\usage_limits.json`.
-2. `widget.py` lee ese archivo, cuenta los tokens de los logs en `~\.claude\projects\**\*.jsonl` y dibuja el widget.
+2. El widget lee ese archivo, cuenta los tokens de los logs en `~\.claude\projects\**\*.jsonl` y dibuja el estilo elegido.
 
 ## Requisitos
 
 - Windows 10/11
 - Python 3.10 o superior
-- `pip install PySide6-Essentials` (opcional; sin él se usa la versión Tk)
+- `pip install PySide6-Essentials`
 - Claude Code con la línea de estado configurada
 
 ## Instalación y uso
@@ -37,19 +54,17 @@ Reinicia Claude Code y envía un mensaje: el archivo de límites se crea con la 
 
 ### 2. Abrir el widget (sin ventana de consola)
 
+Doble clic en `ClaudeWidget.pyw`, o:
+
 ```powershell
-pythonw widget.pyw
+pythonw ClaudeWidget.pyw
 ```
 
-O haz doble clic en `widget.pyw`. Para ver errores en consola usa `python widget.py`.
+Para ver errores en consola usa `python ClaudeWidget.pyw`. Si falta PySide6 aparece un aviso con la instrucción de instalación.
 
 ### 3. Iniciar con Windows (opcional)
 
-Desde **Ajustes → Iniciar con Windows**, o con:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File instalar_inicio.ps1
-```
+Desde **Ajustes → Iniciar con Windows**.
 
 ## Controles
 
@@ -57,63 +72,35 @@ powershell -ExecutionPolicy Bypass -File instalar_inicio.ps1
 |--------|-----------|
 | Arrastrar | Mueve el widget (la posición se guarda) |
 | Clic derecho, o clic en ⚙ | Abre el panel de opciones |
-| Doble clic | Alterna entre tamaño completo y compacto |
-| Clic en ↻ (modo completo) | Actualiza al instante |
+| Doble clic (estilo Clásico) | Alterna entre tamaño completo y compacto |
+| Clic en ↻ (Clásico completo) | Actualiza al instante |
 | `R` / `Esc` en el panel | Actualizar / cerrar |
 
 ### Panel de opciones
 
-Selectores con icono de un solo clic para **Vista** (anillos o barras), **Tamaño** (compacto o completo) y **Tema** (automático, claro u oscuro), más las acciones **Ajustes…**, **Actualizar ahora** y **Salir**.
+Selectores con icono de un solo clic para **Estilo**, **Tema** (automático, claro u oscuro) y, solo con el estilo Clásico, **Vista** (anillos o barras) y **Tamaño**. Incluye **Ajustes…**, **Actualizar ahora** y **Salir**. Queda abierto, se mueve desde cualquier zona libre, recuerda su posición y se atenúa cuando el ratón no está encima.
 
 ### Ajustes
 
 - **Apariencia:** tema y opacidad (30–100 %).
-- **Datos:** intervalo de actualización (5, 15, 30 o 60 s) y umbrales de aviso amarillo y rojo (por defecto 70 % y 90 %).
+- **Datos:** intervalo de actualización (5, 15, 30 o 60 s) y umbrales de «Ojo» y «Frena» (por defecto 70 % y 90 %).
 - **Sistema:** iniciar con Windows y restablecer valores.
 
-Todo se aplica y se guarda al instante en `~\.claude-usage-widget.json`. Los valores fuera de rango vuelven al valor por defecto.
-
-## Cambios
-
-### 0.05 «Aurora»
-- Interfaz Qt (PySide6) con antialiasing, degradados, sombra y marca de ritmo.
-- Icono propio (`assets/icon.ico`, regenerable con `python widget_qt.py --export-icon`) en ventanas, bandeja y acceso directo de inicio.
-- Icono en la bandeja del sistema: clic para mostrar u ocultar, menú con Ajustes, Actualizar y Salir, y el uso en el tooltip.
-- Ajustes sin marco: se despliega con animación, se mueve desde su barra de título e incluye versión y créditos.
-- El panel de opciones aparece con un fundido suave.
-
-### Correcciones
-- "Actualizar ahora" ya no crea una cadena nueva de refrescos en cada clic.
-- La marca de tiempo de `statusline.ps1` usa UTC real (`ToUnixTimeSeconds`); antes `Get-Date -UFormat %s` podía desfasar la hora en PowerShell 5.1.
-
-### Rendimiento
-- El widget solo redibuja cuando cambia algo (límites, tokens, configuración o el minuto).
-- El tema de Windows se consulta como mucho cada 30 s.
-- El conteo de tokens lee los logs de forma incremental (desde el último offset), guarda fechas ya convertidas y poda archivos viejos: de 0,44 s la primera lectura a 0,005 s las siguientes.
-- `statusline.ps1` solo reescribe el JSON si cambió algún valor o tiene más de 60 s.
-- Intervalo de actualización por defecto: 15 s (antes 5 s).
-
-### Interfaz
-- Texto nítido en pantallas con escala superior al 100 % (DPI awareness); el dibujo y los clics se reescalan.
-- Transición suave de anillos, barras y porcentajes (~60 fps solo mientras un valor cambia).
-- Engranaje ⚙ al pasar el mouse sobre el widget.
-- Nuevo panel de opciones gráfico con selectores con icono, con la paleta y opacidad del widget (el menú nativo queda como respaldo).
-- Nueva ventana de **Ajustes** con validación de rangos y botón de restablecer.
-- La posición se corrige si el monitor cambió y el widget quedaría fuera de pantalla.
-
-### Robustez
-- Arranque sin consola con `widget.pyw` + `pythonw`.
-- Instancia única (no se abren dos widgets).
-- Los errores se guardan en `~\.claude-usage-widget.log` (se recorta pasados 100 KB).
+Todo se aplica al instante y se guarda en `~\.claude-usage-widget.json`. Los valores fuera de rango vuelven al valor por defecto. Los errores se guardan en `~\.claude-usage-widget.log`.
 
 ## Estructura
 
-| Archivo | Descripción |
-|---------|-------------|
-| `widget_qt.py` | Interfaz Qt: tarjeta, anillos/barras, panel de opciones y ajustes |
-| `widget.py` | Lógica (límites, tokens, config) y versión Tk de respaldo |
-| `assets/icon.ico` | Icono de la aplicación |
-| `widget.pyw` | Lanzador sin consola |
-| `statusline.ps1` | Línea de estado de Claude Code que escribe los límites |
-| `instalar_inicio.ps1` | Crea el acceso directo de inicio con Windows |
-| `docs/brainstorm/` | Notas de diseño y análisis de mejoras |
+| Ruta | Descripción |
+|------|-------------|
+| `ClaudeWidget.pyw` | Único ejecutable: lanzador sin consola |
+| `statusline.ps1` | Línea de estado de Claude Code que escribe los límites (se queda en la raíz porque `settings.json` apunta a ella) |
+| `claude_usage/` | Paquete: `config`, `limits`, `status` (Libre/Ojo/Frena), `texts`, `tokens`, `winsys`, `app` |
+| `claude_usage/ui/` | Interfaz Qt: ventana, panel de opciones, ajustes, dibujo común |
+| `claude_usage/ui/styles/` | Un módulo por estilo: `semaforo`, `margen`, `pildora`, `clasico` |
+| `assets/icon.ico` | Icono (regenerable con `python ClaudeWidget.pyw --export-icon`) |
+| `tests/` | Pruebas: `python -m unittest discover -s tests` |
+| `docs/` | Notas de diseño y especificaciones |
+
+### Añadir un estilo
+
+Crea un módulo en `claude_usage/ui/styles/` con una clase con `layout(ctx) -> Layout` y `paint(p, ctx, layout)`, regístralo en `styles/__init__.py` y añade su entrada a `STYLE_CHOICES` en `config.py` y su icono en `Panel._icon`.

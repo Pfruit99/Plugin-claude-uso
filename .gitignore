@@ -9,3 +9,6 @@ build/
 .clawness/*
 !.clawness/memory.md
 !.clawness/rules/
+
+# Visual companion (mockups de brainstorming)
+.superpowers/

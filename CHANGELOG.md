@@ -4,6 +4,25 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-23
+
+### Added
+- Cuatro estilos de widget que se eligen en el panel de opciones (fila **Estilo**) y se guardan: **Semáforo** (luz y palabra *Libre / Ojo / Frena*), **Margen** («Te sobra 1 h 02 min de margen»), **Píldora** (cápsula mínima que se despliega con anillos al pasar el ratón) y **Clásico** (el diseño anterior).
+- El estado *Libre / Ojo / Frena* se calcula por ritmo: compara cuánto llevas gastado con el tiempo que ha pasado de la ventana, además de los umbrales de aviso.
+- Opción «Opciones» en el menú de la bandeja.
+
+### Changed
+- Un único ejecutable en la raíz: `ClaudeWidget.pyw`. El código vive ahora en el paquete `claude_usage/`.
+- Los umbrales de Ajustes pasan a llamarse «Ojo» y «Frena» (antes aviso amarillo y rojo).
+- Las filas Vista y Tamaño del panel solo aparecen con el estilo Clásico.
+- La opacidad y otros ajustes se guardan agrupados, no en cada paso del deslizador.
+- Si el inicio con Windows estaba activado, el acceso directo se actualiza solo al nuevo lanzador.
+
+### Removed
+- La versión Tk de respaldo: ahora se necesita PySide6. Si falta, aparece un aviso de Windows con la instrucción de instalación en lugar de cambiar de interfaz en silencio.
+- `instalar_inicio.ps1`: usa Ajustes → Iniciar con Windows.
+- `widget.py`, `widget_qt.py` y `widget.pyw` (reemplazados por el paquete y `ClaudeWidget.pyw`).
+
 ## [0.0.5] - 2026-10-22
 
 ### Changed
