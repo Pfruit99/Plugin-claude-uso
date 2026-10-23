@@ -1,9 +1,10 @@
 """Contrato comun de los estilos: cada uno calcula su Layout y lo dibuja."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from PySide6.QtCore import QPointF, QRectF
 
+from ...agents import Overview
 from ...limits import Limits
 from ...status import STALE_SECONDS, Status
 from ..fx import Fx
@@ -22,10 +23,25 @@ class Context:
     hover: bool
     now: float
     fx: Fx = Fx()  # efectos de vida visual; por defecto, ninguno
+    overview: Overview | None = None  # estado combinado de los agentes; None = solo Claude
+    claude: Limits | None = None      # limites de Claude con porcentajes animados (para el estilo Clasico)
 
     @property
     def stale(self):
         return bool(self.limits.updated) and self.now - self.limits.updated > STALE_SECONDS
+
+    def claude_view(self):
+        """El mismo contexto visto solo desde Claude (el estilo Clasico no mezcla agentes)."""
+        entry = next((e for e in self.overview.entries if e.name == "claude"), None) if self.overview else None
+        if entry is None:
+            return self
+        return replace(self, limits=self.claude or entry.limits, real=entry.limits, status=entry.status)
+
+    @property
+    def agent_name(self):
+        """Nombre del agente elegido cuando no es Claude; None si es Claude o no hay varios agentes."""
+        ov = self.overview
+        return ov.chosen_label if ov and ov.chosen not in (None, "claude") else None
 
     def window(self, key):
         return {"five": self.limits.five, "week": self.limits.week}.get(key)

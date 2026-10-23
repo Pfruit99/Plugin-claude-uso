@@ -8,7 +8,9 @@ from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
 from claude_usage import config
+from claude_usage.agents import combine
 from claude_usage.limits import Limits, Window
+from claude_usage.providers.base import SIN_SESION, Reading
 from claude_usage.status import SPANS, compute_status
 from claude_usage.ui.fonts import Fonts
 from claude_usage.ui.styles import STYLES
@@ -33,6 +35,25 @@ def context(lim, style, hover=False, **cfg):
                    cfg=full, pal=THEMES["dark"], fonts=Fonts(), hover=hover, now=NOW)
 
 
+def multi_context(items, style, hover=False):
+    """Contexto con varios agentes, como lo arma Card: dibuja el agente elegido."""
+    cfg = dict(config.DEFAULT_CONFIG, style=style)
+    ov = combine(items, cfg["warn"], cfg["bad"], NOW)
+    chosen = ov.chosen_entry or ov.entries[0]
+    return Context(limits=chosen.limits, real=chosen.limits, status=ov.status, tokens=(1200, 34000), cfg=cfg,
+                   pal=THEMES["dark"], fonts=Fonts(), hover=hover, now=NOW, overview=ov,
+                   claude=ov.entries[0].limits)
+
+
+MES = Window(10.0, NOW + 20 * 86400, span=30 * 86400, label="Mes")
+AGENTS = {
+    "claude frena, codex libre": [("claude", "Claude", Reading(CASES["frena"])),
+                                  ("codex", "Codex", Reading(Limits(None, MES, NOW - 5)))],
+    "codex sin sesion": [("claude", "Claude", Reading(CASES["libre"])), ("codex", "Codex", Reading(Limits(), SIN_SESION))],
+    "solo claude": [("claude", "Claude", Reading(CASES["ojo"]))],
+}
+
+
 class StyleTests(unittest.TestCase):
     def test_los_estilos_coinciden_con_las_opciones(self):
         self.assertEqual(set(STYLES), {v for _, v in config.STYLE_CHOICES})
@@ -51,6 +72,38 @@ class StyleTests(unittest.TestCase):
                     p.translate(14, 14)
                     style.paint(p, ctx, layout)
                     p.end()
+
+    def test_todos_los_estilos_se_dibujan_con_varios_agentes(self):
+        for name, style in STYLES.items():
+            for case, items in AGENTS.items():
+                for hover in (False, True):
+                    ctx = multi_context(items, name, hover)
+                    layout = style.layout(ctx)
+                    img = QImage(layout.w + 40, layout.h + 40, QImage.Format_ARGB32)
+                    img.fill(0)
+                    p = QPainter(img)
+                    p.translate(14, 14)
+                    style.paint(p, ctx, layout)
+                    p.end()
+
+    def test_pildora_nombra_al_agente_elegido(self):
+        from claude_usage.texts import pill_text
+        ctx = multi_context(AGENTS["claude frena, codex libre"], "pildora")
+        self.assertEqual(ctx.agent_name, "Codex")
+        self.assertTrue(pill_text(ctx.status, ctx.agent_name).endswith("· Codex"))
+        self.assertIsNone(multi_context(AGENTS["solo claude"], "pildora").agent_name)
+
+    def test_pildora_con_varios_agentes_crece_al_desplegarse(self):
+        one = STYLES["pildora"].layout(multi_context(AGENTS["solo claude"], "pildora", hover=True))
+        two = STYLES["pildora"].layout(multi_context(AGENTS["claude frena, codex libre"], "pildora", hover=True))
+        self.assertGreater(two.h, one.h)
+
+    def test_clasico_sigue_mirando_solo_a_claude(self):
+        ctx = multi_context(AGENTS["claude frena, codex libre"], "clasico")
+        self.assertEqual(ctx.status.label, "Mes")             # el estado global es el de Codex...
+        view = ctx.claude_view()
+        self.assertEqual(view.status.label, "5 h")            # ...pero Clasico dibuja Claude
+        self.assertEqual(view.real, ctx.overview.entries[0].limits)
 
     def test_las_zonas_clicables_caben_en_la_tarjeta(self):
         for name, style in STYLES.items():

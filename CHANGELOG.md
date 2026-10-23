@@ -4,6 +4,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
+### Added
+- **Límites de Codex** junto a los de Claude. Se activan en Ajustes → Agentes («Mostrar límites de Codex») con la sesión de tu cuenta de ChatGPT; el botón «Iniciar sesión…» abre el inicio de sesión de Codex en el navegador. El widget nunca lee ni guarda tu token: pregunta a `codex app-server`, cada 5 minutos y solo con el widget visible, con tiempo máximo de 15 s y sin dejar procesos abiertos.
+- El widget muestra el estado del **mejor agente disponible** y dice con cuál seguir: si Claude frena y Codex está libre, aparece «Libre» con «Claude frena · sigue con Codex». Con empate de nivel manda Claude. *Frena* solo aparece cuando todos los agentes activos frenan.
+- Fichas por agente en Semáforo, Margen y Píldora («● Claude Frena  ● Codex Libre»); la Píldora nombra al agente y su detalle lista a todos. Los avisos de Windows y el tooltip de la bandeja nombran el agente.
+- Las ventanas ahora tienen su propio nombre y duración: Codex con plan gratuito tiene una sola ventana de 30 días y se muestra como «Mes».
+
+### Changed
+- En Margen, una ventana sin uso dice «Sin uso · 0 % en 5 h» en vez de presumir un margen que solo es el tiempo transcurrido.
+- Clásico sigue mostrando solo Claude.
+- Los datos con más de 15 minutos siguen contando para el estado y se señalan como desactualizados (no generan avisos).
+
 ## [0.2.0] - 2026-10-23
 
 ### Added

@@ -1,6 +1,6 @@
 # Claude Usage Widget
 
-**Versión 0.2.0 «Aurora»** · Desarrollado por **Pfruit99** con **Claude Code**
+**Versión 0.3.0 «Aurora»** · Desarrollado por **Pfruit99** con **Claude Code**
 
 Widget de escritorio para Windows que responde de un vistazo a una pregunta: **¿puedo seguir trabajando con Claude Code?** Compara cuánto llevas gastado de los límites de 5 horas y semanal con el tiempo que ha pasado, y te lo dice como *Libre*, *Ojo* o *Frena*.
 
@@ -22,6 +22,21 @@ Se eligen en el panel de opciones (fila **Estilo**) y se guardan.
 - **Libre**: el resto.
 
 La marca blanca en barras y anillos indica cuánto deberías llevar según el tiempo transcurrido.
+
+## Varios agentes (Claude + Codex)
+
+Además de Claude, el widget puede mostrar los límites de **Codex** con tu cuenta de ChatGPT. Está desactivado por defecto.
+
+1. Abre **Ajustes → Agentes**, marca «Mostrar límites de Codex» y pulsa **Iniciar sesión…** (se abre el navegador; también vale `codex login` en una terminal).
+2. El widget pregunta a `codex app-server` cada 5 minutos, solo con el widget visible. **Nunca lee ni guarda tu token**: usa la sesión del propio Codex.
+
+Codex se busca en el PATH, en `%APPDATA%\npm` y en la extensión de VS Code o Cursor (`openai.chatgpt-*`). Si está en otro sitio, escribe la ruta en `codex_path` de `~\.claude-usage-widget.json`.
+
+Las ventanas dependen del plan: con el plan gratuito de ChatGPT hay una sola de 30 días y se muestra como «Mes»; con un plan de pago, las de 5 h y semanal.
+
+**Cómo se decide el estado con varios agentes:** se muestra el del *mejor* agente. Si Claude y Codex están al mismo nivel, manda Claude; si Claude está en *Ojo* o *Frena* y Codex en un nivel mejor, el widget pasa a Codex y lo dice («Claude frena · sigue con Codex»). *Frena* solo aparece cuando todos los agentes activos frenan. Un agente sin sesión o sin datos no cuenta. El estilo Clásico sigue mostrando solo Claude.
+
+Solo se incluyen agentes con límites que se pueden medir de verdad: Gemini, Qwen, OpenCode y Cursor no exponen un límite local.
 
 ## Avisos y animaciones
 
@@ -98,6 +113,7 @@ Selectores con icono de un solo clic para **Estilo**, **Tema** (automático, cla
 
 - **Apariencia:** tema, opacidad (30–100 %) y animaciones.
 - **Datos:** intervalo de actualización (5, 15, 30 o 60 s) y umbrales de «Ojo» y «Frena» (por defecto 70 % y 90 %).
+- **Agentes:** límites de Codex e inicio de sesión.
 - **Sistema:** iniciar con Windows, avisos de Windows (con botón «Probar aviso») y restablecer valores.
 
 Todo se aplica al instante y se guarda en `~\.claude-usage-widget.json`. Los valores fuera de rango vuelven al valor por defecto. Los errores se guardan en `~\.claude-usage-widget.log`.
@@ -108,7 +124,8 @@ Todo se aplica al instante y se guarda en `~\.claude-usage-widget.json`. Los val
 |------|-------------|
 | `ClaudeWidget.pyw` | Único ejecutable: lanzador sin consola |
 | `statusline.ps1` | Línea de estado de Claude Code que escribe los límites (se queda en la raíz porque `settings.json` apunta a ella) |
-| `claude_usage/` | Paquete: `config`, `limits`, `status` (Libre/Ojo/Frena), `alerts` (avisos), `texts`, `tokens`, `winsys`, `app` |
+| `claude_usage/` | Paquete: `config`, `limits`, `status` (Libre/Ojo/Frena), `agents` (estado combinado), `alerts` (avisos), `texts`, `tokens`, `winsys`, `app` |
+| `claude_usage/providers/` | Un proveedor de límites por agente: `claude` y `codex` (cliente de `codex app-server`) |
 | `claude_usage/ui/` | Interfaz Qt: ventana, panel de opciones, ajustes, dibujo común y efectos (`fx`) |
 | `claude_usage/ui/styles/` | Un módulo por estilo: `semaforo`, `margen`, `pildora`, `clasico` |
 | `assets/icon.ico` | Icono (regenerable con `python ClaudeWidget.pyw --export-icon`) |

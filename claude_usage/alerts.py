@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from .formatting import fmt_duration
 from .status import FRENA, LIBRE, OJO, SIN_DATOS
-from .texts import WINDOW_NAMES, hint
+from .texts import hint
 
 COOLDOWN = 600  # segundos minimos entre dos avisos del mismo tipo
 
@@ -16,8 +16,14 @@ class Alert:
     warning: bool   # True para el icono de advertencia
 
 
-def build_alert(kind, status):
-    name = WINDOW_NAMES.get(status.key, "")
+def build_alert(kind, status, agent=None):
+    """`agent` nombra al agente cuando no es Claude (p. ej. "Codex")."""
+    alert = _build(kind, status)
+    return alert if not agent else Alert(alert.kind, alert.title, f"{agent}: {alert.message}", alert.warning)
+
+
+def _build(kind, status):
+    name = status.label or ""
     if kind == "ojo":
         return Alert(kind, "Ojo con el uso", f"{hint(status)} · {round(status.pct)} % de {name}", False)
     if kind == "frena":
@@ -40,7 +46,7 @@ class StateWatcher:
         self.level = None
         self._sent = {}
 
-    def update(self, status, stale, now):
+    def update(self, status, stale, now, agent=None):
         if status.level == SIN_DATOS or stale:
             return None
         prev, self.level = self.level, status.level
@@ -57,4 +63,4 @@ class StateWatcher:
         if now - self._sent.get(kind, float("-inf")) < COOLDOWN:
             return None
         self._sent[kind] = now
-        return build_alert(kind, status)
+        return build_alert(kind, status, agent)

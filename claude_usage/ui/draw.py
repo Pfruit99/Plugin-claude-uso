@@ -2,9 +2,12 @@
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QConicalGradient, QLinearGradient, QPainterPath, QPen, QPixmap, QPainter
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen,
+                           QPixmap)
 
-from .theme import GRADIENT_START, M
+from ..providers.base import OK, STATE_TEXT
+from ..texts import WORDS
+from .theme import GRADIENT_START, M, NO_DATA, STATUS_COLOR
 
 _shadows = {}
 
@@ -134,3 +137,20 @@ def draw_track(p, x, y, w, h, pct, color, pal, pace=None, ghost=False):
             p.setBrush(qc(color, 70))
             p.drawRoundedRect(QRectF(x + width - h / 2, y, px - x - width + h / 2, h), h / 2, h / 2)
         draw_pace_tick(p, px, y - 3, y + h + 3, pal)
+
+
+def draw_agent_chips(p, entries, pal, fonts, x, y):
+    """Una ficha por agente: luz de su estado y su nombre ("● Claude Frena  ● Codex Libre")."""
+    font = fonts.make(9)
+    metrics = QFontMetricsF(font)
+    for entry in entries:
+        if entry.usable:
+            color, text = STATUS_COLOR[entry.status.level], f"{entry.label} {WORDS[entry.status.level]}"
+        else:
+            state = "sin datos" if entry.state == OK else STATE_TEXT[entry.state].lower()
+            color, text = NO_DATA, f"{entry.label} {state}"
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(color))
+        p.drawEllipse(QPointF(x + 4, y), 3.5, 3.5)
+        draw_text(p, x + 12, y, text, pal["sub"], font)
+        x += 12 + metrics.horizontalAdvance(text) + 14

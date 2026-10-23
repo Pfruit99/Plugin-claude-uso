@@ -11,6 +11,8 @@ LIMITS_FILE = Path.home() / ".claude" / "usage_limits.json"
 class Window:
     pct: float
     resets_at: float | None  # epoch del proximo reinicio; None si la ventana aun no empezo
+    span: float | None = None   # duracion en segundos; None = la habitual de la ranura (5 h o 7 d)
+    label: str | None = None    # nombre para mostrar ("Mes"); None = el habitual de la ranura
 
 
 @dataclass(frozen=True)

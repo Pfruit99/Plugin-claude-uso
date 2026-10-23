@@ -17,6 +17,7 @@ def exhausted_windows(real):
 
 class Clasico:
     def layout(self, ctx):
+        ctx = ctx.claude_view()
         full, ring = ctx.cfg["size"] == "full", ctx.cfg["view"] == "ring"
         no_data = ctx.real.five is None and ctx.real.week is None
         h = 44 + (38 if exhausted_windows(ctx.real) else 0) + (20 if no_data else 0)
@@ -28,6 +29,7 @@ class Clasico:
         return Layout(w, h, zones)
 
     def paint(self, p, ctx, layout):
+        ctx = ctx.claude_view()
         pal, f, cfg = ctx.pal, ctx.fonts, ctx.cfg
         W, H = layout.w, layout.h
         five, week = ctx.limits.five, ctx.limits.week

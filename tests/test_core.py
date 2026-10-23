@@ -115,6 +115,12 @@ class TextTests(unittest.TestCase):
         fast = compute_status(Limits(window(50, 0.2)), now=NOW)
         self.assertEqual(texts.margin_parts(fast)[0], "Vas")
 
+    def test_sin_uso_no_presume_de_margen(self):
+        st = compute_status(Limits(window(0, 0.4)), now=NOW)
+        self.assertEqual(texts.margin_parts(st), ("Sin uso", "0 %", "en 5 h"))
+        mes = Limits(week=Window(0.0, NOW + 20 * 86400, span=30 * 86400, label="Mes"))
+        self.assertEqual(texts.margin_parts(compute_status(mes, now=NOW))[2], "en Mes")
+
     def test_agotado(self):
         st = compute_status(Limits(window(100, 0.9)), now=NOW)
         self.assertEqual(texts.margin_parts(st)[0], "Vuelve en")

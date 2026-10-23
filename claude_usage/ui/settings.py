@@ -111,6 +111,21 @@ class SettingsDialog(QDialog):
             spin.valueChanged.connect(lambda v, k=key: app.apply(k, v))
             row(text, spin)
 
+        section("Agentes")
+        self.codex = QCheckBox("Mostrar límites de Codex (cuenta de ChatGPT)")
+        self.codex.toggled.connect(lambda on: app.apply("codex_enabled", on))
+        root.addWidget(self.codex)
+        self.codex_state = QLabel()
+        self.codex_state.setObjectName("about")
+        login = QPushButton("Iniciar sesión…")
+        login.clicked.connect(self._codex_login)
+        line = QHBoxLayout()
+        line.addWidget(self.codex_state)
+        line.addStretch()
+        line.addWidget(login)
+        root.addLayout(line)
+        app.bridge.reading_ready.connect(self._sync_agents)
+
         section("Sistema")
         self.startup = QCheckBox("Iniciar con Windows")
         self.startup.toggled.connect(self._startup)
@@ -156,7 +171,7 @@ class SettingsDialog(QDialog):
     def _sync(self):
         """Refleja la configuracion actual en los controles (sin disparar cambios)."""
         cfg = self.app.cfg
-        controls = (self.theme, self.opacity, self.refresh, self.startup, self.animations, self.notify,
+        controls = (self.theme, self.opacity, self.refresh, self.startup, self.animations, self.notify, self.codex,
                     *self.spins.values())
         for w in controls:
             w.blockSignals(True)
@@ -170,8 +185,24 @@ class SettingsDialog(QDialog):
         self.startup.setChecked(winsys.startup_enabled())
         self.animations.setChecked(cfg["animations"])
         self.notify.setChecked(cfg["notify"])
+        self.codex.setChecked(cfg["codex_enabled"])
         for w in controls:
             w.blockSignals(False)
+        self._sync_agents()
+
+    def _sync_agents(self, *_):
+        self.codex_state.setText(f"Codex: {self.app.agent_state_text('codex')}")
+
+    def _codex_login(self):
+        """Activa Codex y abre el inicio de sesion de ChatGPT en el navegador."""
+        started = self.app.start_codex_login()
+        self.codex.blockSignals(True)
+        self.codex.setChecked(self.app.cfg["codex_enabled"])
+        self.codex.blockSignals(False)
+        if not started:
+            self.codex_state.setText("Codex: No instalado")
+        else:
+            self._sync_agents()
 
     # --- despliegue animado -----------------------------------------------------
     def showEvent(self, e):

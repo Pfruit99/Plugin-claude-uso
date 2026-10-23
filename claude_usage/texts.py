@@ -1,9 +1,8 @@
 """Frases que acompanan al estado, sin dependencias de interfaz."""
 from .formatting import fmt_duration
-from .status import FRENA, LIBRE, OJO, SIN_DATOS
+from .status import FRENA, LIBRE, OJO, SIN_DATOS, window_label
 
 WORDS = {LIBRE: "Libre", OJO: "Ojo", FRENA: "Frena", SIN_DATOS: "Sin datos"}
-WINDOW_NAMES = {"five": "5 h", "week": "Semana"}
 _ADJECTIVES = {LIBRE: "normal", OJO: "alta", FRENA: "casi al límite"}
 
 
@@ -29,22 +28,28 @@ def margin_parts(status):
     if status.level == FRENA:
         reset = f"· reinicia en {fmt_duration(status.reset_in)}" if status.reset_in is not None else ""
         return "Quedan", f"{round(100 - status.pct)} %", reset
+    if status.pct < 1:  # sin uso, el "margen" seria solo el tiempo transcurrido: no dice nada
+        return "Sin uso", "0 %", f"en {status.label}"
     if status.margin is None:
-        return "Has usado", f"{round(status.pct)} %", f"de {WINDOW_NAMES[status.key]}"
+        return "Has usado", f"{round(status.pct)} %", f"de {status.label}"
     if status.margin >= 0:
         return "Te sobra", fmt_duration(status.margin), "de margen"
     return "Vas", fmt_duration(-status.margin), "por delante"
 
 
-def pill_text(status):
+def pill_text(status, agent=None):
+    """Texto de la capsula; `agent` nombra al agente cuando no es Claude."""
     word = WORDS[status.level]
     if status.level == SIN_DATOS:
-        return word
-    if status.level == FRENA:
+        text = word
+    elif status.level == FRENA:
         if status.exhausted and status.reset_in is not None:
-            return f"{word} · vuelve {fmt_duration(status.reset_in)}"
-        return f"{word} · {round(status.pct)} %"
-    return f"{word} · {fmt_duration(status.reset_in)}" if status.reset_in is not None else word
+            text = f"{word} · vuelve {fmt_duration(status.reset_in)}"
+        else:
+            text = f"{word} · {round(status.pct)} %"
+    else:
+        text = f"{word} · {fmt_duration(status.reset_in)}" if status.reset_in is not None else word
+    return f"{text} · {agent}" if agent else text
 
 
 def other_window_note(status, limits):
@@ -54,4 +59,4 @@ def other_window_note(status, limits):
     if window is None:
         return ""
     adjective = "agotada" if window.pct >= 100 else _ADJECTIVES[status.levels[other]]
-    return f"{WINDOW_NAMES[other]}: {round(window.pct)} % · {adjective}"
+    return f"{window_label(other, window)}: {round(window.pct)} % · {adjective}"

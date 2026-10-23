@@ -1,19 +1,22 @@
-"""Ventana flotante: reune datos, animacion y eventos; el dibujo lo hace el estilo elegido."""
+"""Ventana flotante: reune datos de los agentes, animacion y eventos; el dibujo lo hace el estilo elegido."""
 import logging
 import threading
 import time
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QSystemTrayIcon, QWidget
 
 from .. import APP_NAME, config, winsys
+from ..agents import combine
 from ..alerts import Alert, StateWatcher
-from ..limits import Limits, Window, read_limits
-from ..status import STALE_SECONDS, compute_status
-from ..texts import WINDOW_NAMES, WORDS
+from ..limits import Limits
+from ..providers import PROVIDERS, STATE_TEXT, Reading, is_enabled
+from ..providers.base import ERROR, OK, PENDIENTE
+from ..providers.codex import start_login
+from ..texts import WORDS
 from ..tokens import TokenCounter
 from .fonts import Fonts
 from .fx import Fx, fx_active, make_fx
@@ -29,10 +32,13 @@ TOKENS_EVERY = 30
 HOVER_LEAVE_MS = 250  # retardo al salir el raton, para que la pildora no parpadee
 FX_MS = 50            # ~20 fps para el latido y el destello; solo corre cuando hay algo que animar
 NOTIFY_MS = 8000
+LOGIN_POLL_MS = 10_000  # tras pulsar "Iniciar sesion", se reintenta cada 10 s durante 2 minutos
+LOGIN_POLLS = 12
 
 
 class Bridge(QObject):
     tokens_ready = Signal()
+    reading_ready = Signal(str, object)  # (agente, Reading) desde un hilo de lectura
 
 
 class Card(QWidget):
@@ -46,9 +52,13 @@ class Card(QWidget):
         self.fonts = Fonts()
         self.counter = TokenCounter()
         self.tokens = (0, 0)
-        self.limits = Limits()
+        self.limits = Limits()   # limites de Claude (los de los demas agentes estan en self.readings)
+        self.readings = {}       # agente -> ultimo Reading de los proveedores lentos
+        self._polled = {}        # agente -> hora de la ultima consulta
+        self._polling = set()    # agentes con una consulta en marcha
         self.bridge = Bridge()
         self.bridge.tokens_ready.connect(self.relayout)
+        self.bridge.reading_ready.connect(self._on_reading)
         self._busy = False
         self._tokens_at = 0.0
         self._shown = {}
@@ -57,6 +67,7 @@ class Card(QWidget):
         self._press = self._origin = None
         self._moved = False
         self._layout = None
+        self._login_ticks = 0
         self.watcher = StateWatcher()
         self._level = self._prev_level = self._changed_at = None  # para el fundido y el destello
 
@@ -80,6 +91,9 @@ class Card(QWidget):
         self.save_timer.setSingleShot(True)
         self.save_timer.setInterval(400)
         self.save_timer.timeout.connect(lambda: config.save_config(self.cfg))
+        self.login_timer = QTimer(self)
+        self.login_timer.setInterval(LOGIN_POLL_MS)
+        self.login_timer.timeout.connect(self._login_tick)
 
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.cfg["topmost"])
         self.setWindowOpacity(self.cfg["opacity"] / 100)
@@ -126,6 +140,12 @@ class Card(QWidget):
         elif key == "topmost":
             self.setWindowFlag(Qt.WindowStaysOnTopHint, cfg["topmost"])
             self.show()
+        elif key == "codex_enabled":
+            if cfg["codex_enabled"]:
+                self._poll_agents(force=True)
+            else:
+                self.readings.pop("codex", None)
+                self.login_timer.stop()
         self.save()
         self.relayout()
 
@@ -146,9 +166,79 @@ class Card(QWidget):
     def _forget_settings(self, *_):
         self._settings = None
 
+    # --- agentes ----------------------------------------------------------------
+    def _items(self):
+        """[(nombre, etiqueta, Reading)] de los agentes activos, con Claude primero."""
+        items = [("claude", PROVIDERS["claude"].label, Reading(self.limits))]
+        for name, provider in PROVIDERS.items():
+            if name != "claude" and is_enabled(self.cfg, name):
+                items.append((name, provider.label, self.readings.get(name) or Reading(Limits(), PENDIENTE)))
+        return items
+
+    def overview(self, now=None):
+        return combine(self._items(), self.cfg["warn"], self.cfg["bad"], now)
+
+    def agent_state_text(self, name):
+        """Estado de un agente para Ajustes: Conectado, Sin sesion, No instalado..."""
+        if not is_enabled(self.cfg, name):
+            return "Desactivado"
+        reading = self.readings.get(name)
+        return STATE_TEXT[reading.state if reading else PENDIENTE]
+
+    def _poll_agents(self, force=False):
+        """Lanza la lectura de los agentes lentos: solo con el widget visible y cada `poll_seconds`."""
+        now = time.time()
+        for name, provider in PROVIDERS.items():
+            if not provider.slow or not is_enabled(self.cfg, name) or name in self._polling:
+                continue
+            if not force and (not self.isVisible() or now - self._polled.get(name, 0) < provider.poll_seconds):
+                continue
+            self._polling.add(name)
+            self._polled[name] = now
+            threading.Thread(target=self._read_agent, args=(name,), daemon=True).start()
+
+    def _read_agent(self, name):
+        provider = PROVIDERS[name]
+        try:
+            provider.configure(self.cfg)
+            reading = provider.read()
+        except Exception:
+            logging.exception("Error leyendo %s", name)
+            reading = Reading(Limits(), ERROR, "Error inesperado")
+        self.bridge.reading_ready.emit(name, reading)
+
+    def _on_reading(self, name, reading):
+        self._polling.discard(name)
+        if not is_enabled(self.cfg, name):
+            return
+        self.readings[name] = reading
+        if reading.state == OK:
+            self.login_timer.stop()
+        self._watch_state()
+        self.relayout()
+
+    def start_codex_login(self):
+        """Activa Codex y lanza `codex login`; despues se reintenta la lectura hasta que haya sesion."""
+        self.apply("codex_enabled", True)
+        if not start_login(self.cfg["codex_path"]):
+            return False
+        self._login_ticks = 0
+        self.login_timer.start()
+        return True
+
+    def _login_tick(self):
+        self._login_ticks += 1
+        reading = self.readings.get("codex")
+        if self._login_ticks > LOGIN_POLLS or (reading and reading.state == OK):
+            self.login_timer.stop()
+        else:
+            self._poll_agents(force=True)
+
     # --- datos ------------------------------------------------------------------
     def refresh(self, reschedule=True):
-        self.limits = read_limits()
+        """`reschedule=False` es una actualizacion manual: tambien consulta ya a los agentes lentos."""
+        self.limits = PROVIDERS["claude"].read().limits
+        self._poll_agents(force=not reschedule)
         self._watch_state()
         self.relayout()
         if not self._busy and time.time() - self._tokens_at >= max(TOKENS_EVERY, self.cfg["refresh"]):
@@ -178,9 +268,9 @@ class Card(QWidget):
     # --- avisos de Windows ------------------------------------------------------
     def _watch_state(self):
         now = time.time()
-        status = compute_status(self.limits, self.cfg["warn"], self.cfg["bad"], now)
-        stale = bool(self.limits.updated) and now - self.limits.updated > STALE_SECONDS
-        alert = self.watcher.update(status, stale, now)  # siempre vigila; solo muestra si esta activado
+        ov = self.overview(now)
+        agent = ov.chosen_label if ov.chosen not in (None, "claude") else None
+        alert = self.watcher.update(ov.status, ov.stale, now, agent)  # siempre vigila; solo muestra si esta activado
         if alert and self.cfg["notify"]:
             self.notify(alert)
 
@@ -194,25 +284,34 @@ class Card(QWidget):
         self.notify(Alert("prueba", "Aviso de prueba", "Así te avisará el widget cuando cambie el estado.", False))
 
     def tooltip(self):
-        st = compute_status(self.limits, self.cfg["warn"], self.cfg["bad"])
-
-        def part(key, window):
-            return f"{WINDOW_NAMES[key]} {round(window.pct)}%" if window else f"{WINDOW_NAMES[key]} --"
-        return f"{APP_NAME}\n{WORDS[st.level]} · {part('five', self.limits.five)} · {part('week', self.limits.week)}"
+        lines = [APP_NAME]
+        for e in self.overview().entries:
+            if e.usable:
+                lines.append(f"{e.label}: {WORDS[e.status.level]} · {round(e.status.pct)} % de {e.status.label}")
+            else:
+                lines.append(f"{e.label}: {'sin datos' if e.state == OK else STATE_TEXT[e.state].lower()}")
+        return "\n".join(lines)
 
     # --- contexto, tamano y animacion -------------------------------------------
-    def _animated(self, key, window):
-        shown = self._shown.get(key)
-        return window if window is None or shown is None else Window(shown, window.resets_at)
+    def _animated(self, slot, window):
+        shown = self._shown.get(slot)
+        return window if window is None or shown is None else replace(window, pct=shown)
+
+    def _animated_limits(self, name, limits):
+        return replace(limits, five=self._animated((name, "five"), limits.five),
+                       week=self._animated((name, "week"), limits.week))
 
     def _context(self):
         now = time.time()
         cfg = self.cfg
-        animated = replace(self.limits, five=self._animated("five", self.limits.five),
-                           week=self._animated("week", self.limits.week))
-        status = compute_status(self.limits, cfg["warn"], cfg["bad"], now)
-        return Context(limits=animated, real=self.limits, status=status, tokens=self.tokens, cfg=cfg,
-                       pal=self.palette_(), fonts=self.fonts, hover=self._hover, now=now, fx=self._fx(status.level, now))
+        ov = self.overview(now)
+        claude = next(e for e in ov.entries if e.name == "claude")
+        chosen = ov.chosen_entry or claude
+        claude_animated = self._animated_limits("claude", claude.limits)
+        limits = claude_animated if chosen.name == "claude" else self._animated_limits(chosen.name, chosen.limits)
+        return Context(limits=limits, real=chosen.limits, status=ov.status, tokens=self.tokens, cfg=cfg,
+                       pal=self.palette_(), fonts=self.fonts, hover=self._hover, now=now,
+                       fx=self._fx(ov.status.level, now), overview=ov, claude=claude_animated)
 
     def _fx(self, level, now):
         if not self.cfg["animations"]:
@@ -247,7 +346,7 @@ class Card(QWidget):
     def relayout(self):
         if self.tray is not None:
             self.tray.setToolTip(self.tooltip())
-        self._track_level(compute_status(self.limits, self.cfg["warn"], self.cfg["bad"]).level, time.time())
+        self._track_level(self.overview().status.level, time.time())
         _, _, layout = self._style_layout()
         self._layout = layout
         self.setFixedSize(layout.w + 2 * M, layout.h + 2 * M)
@@ -255,26 +354,30 @@ class Card(QWidget):
         self._sync_fx_timer()
         self.update()
 
+    def _slots(self):
+        """[((agente, ranura), Window)] de todos los agentes activos, para animar sus porcentajes."""
+        return [((e.name, key), window) for e in self.overview().entries
+                for key, window in (("five", e.limits.five), ("week", e.limits.week))]
+
     def _kick_anim(self):
-        for key, window in (("five", self.limits.five), ("week", self.limits.week)):
+        for slot, window in self._slots():
             if window is None:
-                self._shown[key] = None
-            elif self._shown.get(key) is None:
-                self._shown[key] = 0.0
+                self._shown[slot] = None
+            elif self._shown.get(slot) is None:
+                self._shown[slot] = 0.0
         if not self.anim.isActive() and self._anim_pending():
             self.anim.start()
 
     def _anim_pending(self):
-        return any(w is not None and self._shown.get(k) != w.pct
-                   for k, w in (("five", self.limits.five), ("week", self.limits.week)))
+        return any(w is not None and self._shown.get(s) != w.pct for s, w in self._slots())
 
     def _animate(self):
-        for key, window in (("five", self.limits.five), ("week", self.limits.week)):
-            shown = self._shown.get(key)
+        for slot, window in self._slots():
+            shown = self._shown.get(slot)
             if window is None or shown is None:
                 continue
             target = window.pct
-            self._shown[key] = target if abs(target - shown) < 0.3 else shown + (target - shown) * 0.22
+            self._shown[slot] = target if abs(target - shown) < 0.3 else shown + (target - shown) * 0.22
         if not self._anim_pending():
             self.anim.stop()
         self.update()
@@ -283,6 +386,7 @@ class Card(QWidget):
     def showEvent(self, e):
         super().showEvent(e)
         self._sync_fx_timer()
+        self._poll_agents()
 
     def hideEvent(self, e):
         super().hideEvent(e)
